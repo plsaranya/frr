@@ -128,15 +128,15 @@ struct gm_sock *pim_igmp_sock_lookup_ifaddr(struct list *igmp_sock_list,
 					    struct in_addr ifaddr)
 {
 	struct listnode *sock_node;
-	struct gm_sock *igmp;
+	struct gm_sock *gm;
 
 #ifdef IGMP_SOCK_DUMP
 	igmp_sock_dump(igmp_sock_list);
 #endif
 
-	for (ALL_LIST_ELEMENTS_RO(igmp_sock_list, sock_node, igmp))
-		if (ifaddr.s_addr == igmp->ifaddr.s_addr)
-			return igmp;
+	for (ALL_LIST_ELEMENTS_RO(igmp_sock_list, sock_node, gm))
+		if (pim_addr_is_same(ifaddr, gm->ifaddr))
+			return gm;
 
 	return NULL;
 }

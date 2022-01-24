@@ -83,13 +83,24 @@ void pim_register_stop_send(struct interface *ifp, pim_sgaddr *sg,
 	memset(buffer, 0, 10000);
 	b1 = (uint8_t *)buffer + PIM_MSG_REGISTER_STOP_LEN;
 
+
+#ifndef PIM_AF_IPV6
 	length = pim_encode_addr_group(b1, AFI_IP, 0, 0, sg->grp);
+#else
+	length = pim_encode_addr_group(b1, AFI_IP6, 0, 0, sg->grp);
+#endif
 	b1length += length;
 	b1 += length;
 
+#ifndef PIM_AF_IPV6
 	p.family = AF_INET;
 	p.u.prefix4 = sg->src;
 	p.prefixlen = IPV4_MAX_BITLEN;
+#else
+	p.family = AF_INET6;
+	p.u.prefix6 = sg->src;
+	p.prefixlen = IPV6_MAX_BITLEN;
+#endif
 	length = pim_encode_addr_ucast(b1, &p);
 	b1length += length;
 
@@ -209,6 +220,7 @@ void pim_register_send(const uint8_t *buf, int buf_size, struct in_addr src,
 
 	++pinfo->pim_ifstat_reg_send;
 
+#ifndef PIM_AF_IPV6
 	if (pim_msg_send(pinfo->pim_sock_fd, src, rpg->rpf_addr.u.prefix4,
 			 buffer, buf_size + PIM_MSG_REGISTER_LEN, ifp->name)) {
 		if (PIM_DEBUG_PIM_TRACE) {
@@ -218,6 +230,17 @@ void pim_register_send(const uint8_t *buf, int buf_size, struct in_addr src,
 		}
 		return;
 	}
+#else
+	if (pim_msg_send(pinfo->pim_sock_fd, src, rpg->rpf_addr.u.prefix6,
+			 buffer, buf_size + PIM_MSG_REGISTER_LEN, ifp->name)) {
+		if (PIM_DEBUG_PIM_TRACE) {
+			zlog_debug(
+				"%s: could not send PIM register message on interface %s",
+				__func__, ifp->name);
+		}
+		return;
+	}
+#endif
 }
 
 void pim_null_register_send(struct pim_upstream *up)
@@ -325,13 +348,13 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 	struct pim_instance *pim = pim_ifp->pim;
 
 #define PIM_MSG_REGISTER_BIT_RESERVED_LEN 4
-	ip_hdr = (struct ip *)(tlv_buf + PIM_MSG_REGISTER_BIT_RESERVED_LEN);
+	ip_hdr = (struct IP *)(tlv_buf + PIM_MSG_REGISTER_BIT_RESERVED_LEN);
 
-	if (!if_address_is_local(&dest_addr, AF_INET, pim->vrf->vrf_id)) {
+	if (!if_address_is_local(&dest_addr, AFI, pim->vrf->vrf_id)) {
 		if (PIM_DEBUG_PIM_REG) {
 			char dest[INET_ADDRSTRLEN];
 
-			pim_inet4_dump("<dst?>", dest_addr, dest, sizeof(dest));
+			pim_inet_dump("<dst?>", dest_addr, dest, sizeof(dest));
 			zlog_debug(
 				"%s: Received Register message for destination address: %s that I do not own",
 				__func__, dest);
@@ -367,22 +390,22 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 	 * Line above.  So we need to add 4 bytes to get to the
 	 * start of the actual Encapsulated data.
 	 */
-	memset(&sg, 0, sizeof(sg));
-	sg.src = ip_hdr->ip_src;
-	sg.grp = ip_hdr->ip_dst;
+	memset(&sg, 0, sizeof(struct prefix_sg));
+	sg.src = PIM_L3_SRC(ip_hdr);
+	sg.grp = PIM_L3_DST(ip_hdr);
 
 	i_am_rp = I_am_RP(pim, sg.grp);
 
 	if (PIM_DEBUG_PIM_REG) {
 		char src_str[INET_ADDRSTRLEN];
 
-		pim_inet4_dump("<src?>", src_addr, src_str, sizeof(src_str));
+		pim_inet_dump("<src?>", src_addr, src_str, sizeof(src_str));
 		zlog_debug("Received Register message%s from %s on %s, rp: %d",
 			   pim_str_sg_dump(&sg), src_str, ifp->name, i_am_rp);
 	}
 
 	if (pim_is_grp_ssm(pim_ifp->pim, sg.grp)) {
-		if (sg.src.s_addr == INADDR_ANY) {
+		if (pim_is_addr_any(sg.src)) {
 			zlog_warn(
 				"%s: Received Register message for Group(%pI4) is now in SSM, dropping the packet",
 				__func__, &sg.grp);
@@ -392,8 +415,8 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 	}
 
 	if (i_am_rp
-	    && (dest_addr.s_addr
-		== ((RP(pim, sg.grp))->rpf_addr.u.prefix4.s_addr))) {
+	    && pim_addr_to_prefix_is_same(dest_addr
+		, ((RP(pim, sg.grp))->rpf_addr))) {
 		sentRegisterStop = 0;
 
 		if (pim->register_plist) {
@@ -402,9 +425,7 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 
 			plist = prefix_list_lookup(AFI_IP, pim->register_plist);
 
-			src.family = AF_INET;
-			src.prefixlen = IPV4_MAX_BITLEN;
-			src.u.prefix4 = sg.src;
+            pim_build_prefix(&src, sg.src);
 
 			if (prefix_list_apply(plist, &src) == PREFIX_DENY) {
 				pim_register_stop_send(ifp, &sg, dest_addr,
@@ -431,9 +452,9 @@ int pim_register_recv(struct interface *ifp, struct in_addr dest_addr,
 					"%s: Received Register message with Border bit set",
 					__func__);
 
-			if (pimbr.s_addr == pim_br_unknown.s_addr)
+			if (pim_addr_is_same(pimbr, pim_br_unknown))
 				pim_br_set_pmbr(&sg, src_addr);
-			else if (src_addr.s_addr != pimbr.s_addr) {
+			else if (!(pim_addr_is_same(src_addr, pimbr))) {
 				pim_register_stop_send(ifp, &sg, dest_addr,
 						       src_addr);
 				if (PIM_DEBUG_PIM_PACKETS)

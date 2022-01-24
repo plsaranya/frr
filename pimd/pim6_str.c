@@ -1,6 +1,6 @@
 /*
- * IP SSM ranges for FRR
- * Copyright (C) 2017 Cumulus Networks, Inc.
+ * PIM for FRR
+ * Copyright (C) 2021 Mobashshera Rasool
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,28 +16,37 @@
  * with this program; see the file COPYING; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef PIM_SSM_H
-#define PIM_SSM_H
 
-#define PIM_SSM_STANDARD_RANGE "232.0.0.0/8"
-#define PIM6_SSM_STANDARD_RANGE "ff3x:00/32"
+#include <zebra.h>
 
-/* SSM error codes */
-enum pim_ssm_err {
-	PIM_SSM_ERR_NONE = 0,
-	PIM_SSM_ERR_NO_VRF = -1,
-	PIM_SSM_ERR_DUP = -2,
-};
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
 
-struct pim_ssm {
-	char *plist_name; /* prefix list of group ranges */
-};
+#include "log.h"
 
-void pim_ssm_prefix_list_update(struct pim_instance *pim,
-				struct prefix_list *plist);
-int pim_is_grp_ssm(struct pim_instance *pim, struct in_addr group_addr);
-int pim_ssm_range_set(struct pim_instance *pim, vrf_id_t vrf_id,
-		      const char *plist_name);
-void *pim_ssm_init(void);
-void pim_ssm_terminate(struct pim_ssm *ssm);
-#endif
+#include "pim6_str.h"
+
+void pim_addr_dump(const char *onfail, struct prefix *p, char *buf,
+		   int buf_size)
+{
+	int save_errno = errno;
+
+	if (!inet_ntop(p->family, &p->u.prefix, buf, buf_size)) {
+		zlog_warn("pim_addr_dump: inet_ntop(buf_size=%d): errno=%d: %s",
+			  buf_size, errno, safe_strerror(errno));
+		if (onfail)
+			snprintf(buf, buf_size, "%s", onfail);
+	}
+
+	errno = save_errno;
+}
+
+char *pim_str_sg_dump(const struct prefix_sg *sg)
+{
+	static char sg_str[PIM_SG_LEN];
+
+	pim_str_sg_set(sg, sg_str);
+
+	return sg_str;
+}

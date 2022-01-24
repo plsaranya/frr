@@ -62,17 +62,11 @@ int pim_ifchannel_compare(const struct pim_ifchannel *ch1,
 	if (pim_ifp1->mroute_vif_index > pim_ifp2->mroute_vif_index)
 		return 1;
 
-	if (ntohl(ch1->sg.grp.s_addr) < ntohl(ch2->sg.grp.s_addr))
+	if (pim_addr_ntoh_and_compare(ch1->sg.grp, ch2->sg.grp) != 0)
 		return -1;
 
-	if (ntohl(ch1->sg.grp.s_addr) > ntohl(ch2->sg.grp.s_addr))
-		return 1;
-
-	if (ntohl(ch1->sg.src.s_addr) < ntohl(ch2->sg.src.s_addr))
+	if (pim_addr_ntoh_and_compare(ch1->sg.src, ch2->sg.src) != 0)
 		return -1;
-
-	if (ntohl(ch1->sg.src.s_addr) > ntohl(ch2->sg.src.s_addr))
-		return 1;
 
 	return 0;
 }
@@ -107,17 +101,17 @@ static void pim_ifchannel_find_new_children(struct pim_ifchannel *ch)
 	struct pim_ifchannel *child;
 
 	// Basic Sanity that we are not being silly
-	if ((ch->sg.src.s_addr != INADDR_ANY)
-	    && (ch->sg.grp.s_addr != INADDR_ANY))
+	if ((!(pim_is_addr_any(ch->sg.src)))
+	    && (!(pim_is_addr_any(ch->sg.grp))))
 		return;
 
-	if ((ch->sg.src.s_addr == INADDR_ANY)
-	    && (ch->sg.grp.s_addr == INADDR_ANY))
+	if ((pim_is_addr_any(ch->sg.src))
+	    && (pim_is_addr_any(ch->sg.grp)))
 		return;
 
 	RB_FOREACH (child, pim_ifchannel_rb, &pim_ifp->ifchannel_rb) {
-		if ((ch->sg.grp.s_addr != INADDR_ANY)
-		    && (child->sg.grp.s_addr == ch->sg.grp.s_addr)
+		if ((!(pim_is_addr_any(ch->sg.src)))
+		    && (pim_is_addr_same (child->sg.grp ,ch->sg.grp))
 		    && (child != ch)) {
 			child->parent = ch;
 			listnode_add_sort(ch->sources, child);

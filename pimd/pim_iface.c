@@ -59,8 +59,8 @@ void pim_if_init(struct pim_instance *pim)
 {
 	int i;
 
-	for (i = 0; i < MAXVIFS; i++)
-		pim->iface_vif_index[i] = 0;
+	for (i = 0; i < MAXIFS; i++)
+		pim->iface_if_index[i] = 0;
 }
 
 void pim_if_terminate(struct pim_instance *pim)
@@ -302,19 +302,24 @@ static int detect_primary_address_change(struct interface *ifp,
 	struct in_addr new_prim_addr;
 	int changed;
 
-	if (force_prim_as_any)
+	if (force_prim_as_any) {
+#ifndef PIM_AF_IPV6
 		new_prim_addr.s_addr = INADDR_ANY;
-	else
+#else
+		new_prim_addr.s6_addr = IN6ADDR_ANY_INIT;
+#endif
+	} else {
 		new_prim_addr = pim_find_primary_addr(ifp);
+	}
 
 	changed = new_prim_addr.s_addr != pim_ifp->primary_address.s_addr;
 
 	if (PIM_DEBUG_ZEBRA) {
 		char new_prim_str[INET_ADDRSTRLEN];
 		char old_prim_str[INET_ADDRSTRLEN];
-		pim_inet4_dump("<new?>", new_prim_addr, new_prim_str,
+		pim_inet_dump("<new?>", new_prim_addr, new_prim_str,
 			       sizeof(new_prim_str));
-		pim_inet4_dump("<old?>", pim_ifp->primary_address, old_prim_str,
+		pim_inet_dump("<old?>", pim_ifp->primary_address, old_prim_str,
 			       sizeof(old_prim_str));
 		zlog_debug("%s: old=%s new=%s on interface %s: %s", __func__,
 			   old_prim_str, new_prim_str, ifp->name,
@@ -523,7 +528,11 @@ void pim_if_addr_add(struct connected *ifc)
 				   ? "secondary"
 				   : "primary");
 
+#ifndef PIM_AF_IPV6
 	ifaddr = ifc->address->u.prefix4;
+#else
+	ifaddr = ifc->address->u.prefix6;
+#endif
 
 	detect_address_change(ifp, 0, __func__);
 
@@ -898,14 +907,14 @@ static int pim_iface_next_vif_index(struct interface *ifp)
 	 * The pimreg vif is always going to be in index 0
 	 * of the table.
 	 */
-	if (ifp->ifindex == PIM_OIF_PIM_REGISTER_VIF)
+	if (ifp->ifindex == PIM_OIF_PIM_REGISTER_IF)
 		return 0;
 
-	for (i = 1; i < MAXVIFS; i++) {
-		if (pim->iface_vif_index[i] == 0)
+	for (i = 1; i < MAXIFS; i++) {
+		if (pim->iface_if_index[i] == 0)
 			return i;
 	}
-	return MAXVIFS;
+	return MAXIFS;
 }
 
 /*
@@ -944,7 +953,7 @@ int pim_if_add_vif(struct interface *ifp, bool ispimreg, bool is_vxlan_term)
 
 	pim_ifp->mroute_vif_index = pim_iface_next_vif_index(ifp);
 
-	if (pim_ifp->mroute_vif_index >= MAXVIFS) {
+	if (pim_ifp->mroute_vif_index >= MAXIFS) {
 		zlog_warn(
 			"%s: Attempting to configure more than MAXVIFS=%d on pim enabled interface %s",
 			__func__, MAXVIFS, ifp->name);

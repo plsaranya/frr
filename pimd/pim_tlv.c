@@ -143,6 +143,7 @@ int pim_encode_addr_ucast(uint8_t *buf, struct prefix *p)
 }
 
 #define group_ipv4_encoding_len (4 + sizeof(struct in_addr))
+#define group_ipv6_encoding_len (4 + sizeof(struct in6_addr))
 
 /*
  * Encoded-Group addresses take the following format:
@@ -188,7 +189,7 @@ int pim_encode_addr_ucast(uint8_t *buf, struct prefix *p)
  *       Contains the group address.
  */
 int pim_encode_addr_group(uint8_t *buf, afi_t afi, int bidir, int scope,
-			  struct in_addr group)
+			  struct PIM_ADDR group)
 {
 	uint8_t flags = 0;
 
@@ -207,6 +208,17 @@ int pim_encode_addr_group(uint8_t *buf, afi_t afi, int bidir, int scope,
 		++buf;
 		memcpy(buf, &group, sizeof(struct in_addr));
 		return group_ipv4_encoding_len;
+	case AFI_IP6:
+		*buf = PIM_MSG_ADDRESS_FAMILY_IPV6;
+		++buf;
+		*buf = 0;
+		++buf;
+		*buf = flags;
+		++buf;
+		*buf = 128;
+		++buf;
+		memcpy(buf, &group, sizeof(struct in6_addr));
+		return group_ipv6_encoding_len;
 	default:
 		return 0;
 	}
@@ -556,6 +568,27 @@ int pim_parse_addr_group(pim_sgaddr *sg, const uint8_t *buf, int buf_size)
 		memcpy(&sg->grp.s_addr, addr, sizeof(struct in_addr));
 
 		addr += sizeof(struct in_addr);
+
+		break;
+	case PIM_MSG_ADDRESS_FAMILY_IPV6:
+		if (type) {
+			zlog_warn(
+				"%s: unknown group address encoding type=%d from",
+				__func__, type);
+			return -2;
+		}
+
+		if ((addr + sizeof(struct in6_addr)) > pastend) {
+			zlog_warn(
+				"%s: IPv6 group address overflow: left=%td needed=%zu from",
+				__func__, pastend - addr,
+				sizeof(struct in_addr));
+			return -3;
+		}
+
+		memcpy(sg->grp.s6_addr, addr, sizeof(struct in6_addr));
+
+		addr += sizeof(struct in6_addr);
 
 		break;
 	default: {

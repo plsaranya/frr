@@ -72,12 +72,21 @@ static int pim_is_grp_standard_ssm(struct prefix *group)
 	static struct prefix group_ssm;
 
 	if (first) {
-		if (!str2prefix(PIM_SSM_STANDARD_RANGE, &group_ssm))
-			flog_err(EC_LIB_DEVELOPMENT,
-				 "%s: Failure to Read Group Address: %s",
-				 __func__, PIM_SSM_STANDARD_RANGE);
+#ifndef PIM_AF_IPV6
+        if (!str2prefix(PIM_SSM_STANDARD_RANGE, &group_ssm))
+            flog_err(EC_LIB_DEVELOPMENT,
+                    "%s: Failure to Read Group Address: %s",
+                    __func__, PIM_SSM_STANDARD_RANGE);
 
-		first = 0;
+        first = 0;
+#else
+        if (!str2prefix(PIM6_SSM_STANDARD_RANGE, &group_ssm))
+            flog_err(EC_LIB_DEVELOPMENT,
+                    "%s: Failure to Read Group Address: %s",
+                    __func__, PIM6_SSM_STANDARD_RANGE);
+
+        first = 0;
+#endif
 	}
 
 	return prefix_match(&group_ssm, group);
@@ -90,9 +99,15 @@ int pim_is_grp_ssm(struct pim_instance *pim, struct in_addr group_addr)
 	struct prefix_list *plist;
 
 	memset(&group, 0, sizeof(group));
+#ifndef PIM_AF_IPV6
 	group.family = AF_INET;
 	group.u.prefix4 = group_addr;
 	group.prefixlen = 32;
+#else
+	group.family = AF_INET6;
+	group.u.prefix4 = group_addr;
+	group.prefixlen = 128;
+#endif
 
 	ssm = pim->ssm_info;
 	if (!ssm->plist_name) {

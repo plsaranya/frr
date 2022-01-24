@@ -51,6 +51,7 @@ struct pim_interface;
  * fix it.
  */
 #define PIM_OIF_PIM_REGISTER_VIF   0
+#define PIM_OIF_PIM_REGISTER_IF    PIM_OIF_PIM_REGISTER_VIF
 #define PIM_MAX_USABLE_VIFS        (MAXVIFS - 1)
 
 struct channel_counts {
