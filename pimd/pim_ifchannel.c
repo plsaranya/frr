@@ -247,8 +247,12 @@ void delete_on_noinfo(struct pim_ifchannel *ch)
 {
 	if (ch->local_ifmembership == PIM_IFMEMBERSHIP_NOINFO
 	    && ch->ifjoin_state == PIM_IFJOIN_NOINFO
-	    && ch->t_ifjoin_expiry_timer == NULL)
-		pim_ifchannel_delete(ch);
+	    && ch->t_ifjoin_expiry_timer == NULL) {
+		if (pim_upstream_evaluate_join_desired_interface(ch->upstream, ch,
+					ch->parent)) {
+			pim_ifchannel_delete(ch);
+		}
+	}
 }
 
 void pim_ifchannel_ifjoin_switch(const char *caller, struct pim_ifchannel *ch,

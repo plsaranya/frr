@@ -1047,6 +1047,11 @@ void pim_upstream_ref(struct pim_upstream *up, int flags, const char *name)
 		pim_upstream_update_join_desired(up->pim, up);
 	}
 
+	if (flags  == 0) {
+	if (PIM_DEBUG_PIM_TRACE)
+		zlog_debug("%s(%s): upstream %s ref count %d not incremented",
+			   __func__, name, up->sg_str, up->ref_count);
+	}
 	up->flags |= flags;
 	++up->ref_count;
 	if (PIM_DEBUG_PIM_TRACE)
@@ -1130,6 +1135,9 @@ int pim_upstream_evaluate_join_desired_interface(struct pim_upstream *up,
 		if (!pim_macro_ch_lost_assert(ch)
 		    && pim_macro_chisin_joins_or_include(ch))
 			return 1;
+
+		if (pim_macro_ch_lost_assert(ch))
+                        return 0;
 	}
 
 	/*
@@ -2057,6 +2065,14 @@ static bool pim_upstream_sg_running_proc(struct pim_upstream *up)
 	} else if (PIM_UPSTREAM_FLAG_TEST_SRC_LHR(up->flags)) {
 		pim_upstream_keep_alive_timer_start(up, pim->keep_alive_time);
 		rv = true;
+	}
+
+	if (up->rpf.source_nexthop.interface == NULL) {
+		if (PIM_DEBUG_PIM_TRACE)
+			zlog_debug(
+					"%s: Incoming Interface: unknown",
+					__func__);
+		return rv;
 	}
 
 	if ((up->sptbit != PIM_UPSTREAM_SPTBIT_TRUE) &&
